@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QuizQuest</title>
-    <!-- Trystero Library: Free Cross-Browser Multiplayer with No API Keys -->
+    <!-- Cross-Browser Relay Library: 100% Free with No API Key Limits -->
     <script src="https://unpkg.com"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; max-width: 90vw; }
@@ -22,13 +22,13 @@
 
     <h1>🚀 QuizQuest P2P</h1>
 
-    <!-- MAIN MENU -->
+    <!-- SCREEN 1: MAIN MENU -->
     <div id="m">
         <button onclick="h()">Host Game</button>
         <button onclick="s()">Join Game</button>
     </div>
 
-    <!-- JOIN SETUP -->
+    <!-- SCREEN 2: JOIN SETUP -->
     <div id="j" class="hidden">
         <input type="text" id="p" placeholder="Enter Room PIN Code">
         <input type="text" id="n" placeholder="Nickname">
@@ -36,7 +36,7 @@
         <button onclick="stopGame()" class="stop-btn">Quit</button>
     </div>
 
-    <!-- HOST LOBBY -->
+    <!-- SCREEN 3: HOST LOBBY -->
     <div id="hl" class="hidden">
         <h2>ROOM PIN: <span id="l" style="color:#22c55e;">Generating...</span></h2>
         <p style="margin: 5px 0; color:#aaa;">(Share this custom room PIN with your friends)</p>
@@ -45,20 +45,20 @@
         <button onclick="stopGame()" class="stop-btn">Close Server</button>
     </div>
 
-    <!-- PLAYER WAIT SCREEN -->
+    <!-- SCREEN 4: PLAYER WAIT SCREEN -->
     <div id="wait" class="hidden">
-        <p>Connected! Waiting for host to click start...</p>
+        <p id="wait-msg">Connecting to room relay...</p>
         <button onclick="stopGame()" class="stop-btn">Leave</button>
     </div>
 
-    <!-- HOST LEADERBOARD VIEW -->
+    <!-- SCREEN 5: HOST LEADERBOARD VIEW -->
     <div id="hg" class="hidden">
         <h2 id="hq">Loading question...</h2>
         <ul id="lb"></ul>
         <button onclick="stopGame()" class="stop-btn">Force Stop</button>
     </div>
 
-    <!-- PLAYER INTERFACE -->
+    <!-- SCREEN 6: PLAYER INTERFACE -->
     <div id="pg" class="hidden">
         <h2 id="gold">🪙 Gold: 0</h2>
         <h3 id="pq-text" style="margin: 10px 0; color:#e43f5a;">Question text</h3>
@@ -68,7 +68,7 @@
         <button onclick="ans(3)" id="b3" style="background:#1e1b4b; margin: 8px 0;"></button>
     </div>
 
-    <!-- CHEST VIEW -->
+    <!-- SCREEN 7: CHEST VIEW -->
     <div id="ch" class="hidden">
         <h2>Pick a Chest</h2>
         <button onclick="chst()" style="background:#eab308; color:#000;">🎁 Chest 1</button>
@@ -76,7 +76,7 @@
         <button onclick="chst()" style="background:#eab308; color:#000;">🎁 Chest 3</button>
     </div>
 
-    <!-- PODIUM END -->
+    <!-- SCREEN 8: PODIUM END -->
     <div id="go" class="hidden">
         <h2>Final Standings 🏆</h2>
         <ul id="fl"></ul>
@@ -99,15 +99,14 @@
         }
         function s() { sw('j'); }
 
-        // HOST SYSTEM
+        // HOST ENGINE
         function h() {
             host = true; pin = Math.floor(1000 + Math.random() * 9000).toString();
             document.getElementById('l').innerText = pin; sw('hl');
             
-            // Connect to Trystero Nostr Web Mesh
-            room = trystero.joinRoom({appId: 'blooket-safari-cross-match-p2p'}, pin);
+            room = trystero.joinRoom({appId: 'blooket-safari-p2p-fixed'}, pin);
             
-            // Register channels safely before peer signals launch
+            // Build actions before anything else runs
             const [bindJoin] = room.makeAction('join');
             const [bindScore] = room.makeAction('score');
             [sendStart] = room.makeAction('start');
@@ -116,7 +115,9 @@
             [sendSync] = room.makeAction('sync');
 
             bindJoin((data) => {
-                pld[data.n] = { s: 0 }; ulb();
+                pld[data.n] = { s: 0 }; 
+                ulb();
+                sendSync({d: pld}); // Immediately send list back to confirm connection
             });
 
             bindScore((data) => {
@@ -161,15 +162,17 @@
             });
         }
 
-        // PLAYER SYSTEM
+        // PLAYER ENGINE
         function g() {
             pin = document.getElementById('p').value.trim();
             name = document.getElementById('n').value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
             if (!pin || !name) return alert('Enter Pin and Nickname!');
             
-            room = trystero.joinRoom({appId: 'blooket-safari-cross-match-p2p'}, pin);
+            sw('wait');
+            document.getElementById('wait-msg').innerText = "Connecting to Host PIN: " + pin + "...";
+
+            room = trystero.joinRoom({appId: 'blooket-safari-p2p-fixed'}, pin);
             
-            // Build data listeners first so connection is ready
             [sendJoin] = room.makeAction('join');
             [sendScore] = room.makeAction('score');
             const [bindStart] = room.makeAction('start');
@@ -177,16 +180,20 @@
             const [bindEnd] = room.makeAction('end');
             const [bindSync] = room.makeAction('sync');
 
-            // Send username data immediately upon finding host link
-            room.onPeerJoin(() => {
+            // Force connection check without waiting for slow peer handshake signals
+            let joinInterval = setInterval(() => {
                 sendJoin({ n: name });
-                sw('wait');
+            }, 1500);
+
+            bindSync((data) => { 
+                clearInterval(joinInterval); // Stop trying once the host confirms we are inside
+                document.getElementById('wait-msg').innerText = "✅ Joined lobby successfully! Waiting for host to start...";
+                if(data.d[name] !== undefined) { gold = data.d[name].s; document.getElementById('gold').innerText = "🪙 Gold: " + gold; } 
             });
 
             bindStart((data) => { qidx = data.i; lq(); });
             bindNxt((data) => { qidx = data.i; lq(); });
             bindEnd(() => { sw('go'); document.getElementById('fl').innerHTML = "<li>Game Over! Check Host screen.</li>"; });
-            bindSync((data) => { if(data.d[name] !== undefined) { gold = data.d[name].s; document.getElementById('gold').innerText = "🪙 Gold: " + gold; } });
         }
 
         function lq() {
@@ -198,12 +205,13 @@
         function ans(i) {
             for(let j=0; j<4; j++) document.getElementById('b'+j).disabled = true;
             if (i === qd[qidx].c) { setTimeout(() => sw('ch'), 400); }
-            else { sw('wait'); }
+            else { sw('wait'); document.getElementById('wait-msg').innerText = "Wrong! Waiting for next question..."; }
         }
 
         function chst() {
             let a = Math.floor(Math.random() * 40) + 15; alert(`You got +${a} Gold!`);
             sendScore({ n: name, v: a }); sw('wait');
+            document.getElementById('wait-msg').innerText = "Answer logged! Waiting for next question...";
         }
 
         function stopGame() { if (room) { room.leave(); } location.reload(); }
