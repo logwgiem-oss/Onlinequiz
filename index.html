@@ -2,10 +2,8 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>QuizQuest</title>
-    <!-- Include the Free GunDB Decentralized Database -->
-    <script src="https://jsdelivr.net"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuizQuest Direct</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; max-width: 90vw; }
         body { font-family: sans-serif; background: #121214; color: #fff; padding: 10px; overflow-x: hidden; text-align: center; }
@@ -27,21 +25,23 @@
     </div>
 
     <div id="j" class="hidden">
-        <input type="text" id="p" placeholder="Enter 4-Digit PIN">
+        <input type="text" id="p" placeholder="Paste the Host Code here">
         <input type="text" id="n" placeholder="Nickname">
         <button onclick="g()">Join Lobby</button>
         <button onclick="stopGame()">Quit</button>
     </div>
 
     <div id="hl" class="hidden">
-        <h2>PIN: <span id="l" style="color:#22c55e;">Generating...</span></h2>
+        <h2>YOUR HOST CODE:</h2>
+        <input type="text" id="l" readonly onclick="this.select()" style="background:#222; color:#22c55e; font-size:12px; text-align:center;">
+        <p style="margin: 5px 0; color:#aaa;">(Click code above, copy it, and send it to your friends)</p>
         <ul id="pl"></ul>
         <button onclick="st()">▶️ Start Quiz</button>
         <button onclick="stopGame()">Close Server</button>
     </div>
 
     <div id="wait" class="hidden">
-        <p id="wait-msg">Connecting to room...</p>
+        <p id="wait-msg">Waiting for host to start...</p>
         <button onclick="stopGame()">Leave</button>
     </div>
 
@@ -74,16 +74,13 @@
     </div>
 
     <script>
-        // Start GunDB using free public mesh nodes
-        const gun = Gun(['https://herokuapp.com']);
-
         const qd = [
             { q: "What is 5 + 7?", a: ["10", "12", "14", "11"], c: 1 },
             { q: "Which planet is Red?", a: ["Earth", "Mars", "Jupiter", "Venus"], c: 1 },
             { q: "Capital of France?", a: ["London", "Berlin", "Paris", "Rome"], c: 2 }
         ];
         
-        let host = false, name = "", qidx = 0, pin = "", roomRef = null, pld = {}, gold = 0;
+        let pc, dataChannel, host = false, name = "", qidx = 0, pld = {}, gold = 0;
 
         function sw(id) {
             ['m', 'j', 'hl', 'wait', 'hg', 'pg', 'ch', 'go'].forEach(s => document.getElementById(s).classList.add('hidden'));
@@ -91,32 +88,87 @@
         }
         function s() { sw('j'); }
 
+        function send(obj) {
+            if (dataChannel && dataChannel.readyState === 'open') {
+                dataChannel.send(JSON.stringify(obj));
+            }
+        }
+
+        // HOST CONNECTIVE LOGIC
         function h() {
-            host = true; pin = Math.floor(1000 + Math.random() * 9000).toString();
-            document.getElementById('l').innerText = pin; sw('hl');
+            host = true; sw('hl');
+            pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:://google.com' }] });
             
-            roomRef = gun.get('room_' + pin);
-            roomRef.put({ state: 'lobby', qidx: 0 });
-            
-            // Listen for any player entries worldwide
-            roomRef.get('players').map().on((data, key) => {
-                if (data) {
-                    pld[key] = { s: data.score };
-                    ulb();
-                    if (!document.getElementById('hg').classList.contains('hidden')) uhg();
+            dataChannel = pc.createDataChannel("quizChannel");
+            setupChannelEvents();
+
+            pc.onicecandidate = (e) => {
+                if (!e.candidate) {
+                    // Turn connection data into a simple compressed text string
+                    document.getElementById('l').value = btoa(JSON.stringify(pc.localDescription));
                 }
-            });
+            };
+
+            pc.createOffer().then(offer => pc.setLocalDescription(offer));
+        }
+
+        // PLAYER CONNECTIVE LOGIC
+        function g() {
+            let code = document.getElementById('p').value.trim();
+            name = document.getElementById('n').value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (!code || !name) return alert('Fill in all fields!');
+            
+            sw('wait');
+            
+            pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:://google.com' }] });
+            
+            pc.ondatachannel = (e) => {
+                dataChannel = e.channel;
+                setupChannelEvents();
+                setTimeout(() => { send({ type: 'join', n: name }); }, 500);
+            };
+
+            let offer = JSON.parse(atob(code));
+            pc.setRemoteDescription(new RTCSessionDescription(offer))
+              .then(() => pc.createAnswer())
+              .then(answer => pc.setLocalDescription(answer))
+              .then(() => {
+                  pc.onicecandidate = (e) => {
+                      if (!e.candidate) {
+                          // Copy this answer code back to host text to link sockets
+                          console.log("Answer generated");
+                      }
+                  };
+              });
+        }
+
+        function setupChannelEvents() {
+            dataChannel.onopen = () => {
+                if(!host) document.getElementById('wait-msg').innerText = "✅ Connection established! Waiting for host to start...";
+            };
+            dataChannel.onmessage = (e) => {
+                let msg = JSON.parse(e.data);
+                if (host) {
+                    if (msg.type === 'join') { pld[msg.n] = { s: 0 }; ulb(); send({ type: 'sync', d: pld }); }
+                    if (msg.type === 'score') { pld[msg.n].s += msg.v; uhg(); send({ type: 'sync', d: pld }); }
+                } else {
+                    if (msg.type === 'sync') {
+                        if(msg.d[name] !== undefined) { gold = msg.d[name].s; document.getElementById('gold').innerText = gold; }
+                    }
+                    if (msg.type === 'start' || msg.type === 'nxt') { qidx = msg.i; lq(); }
+                    if (msg.type === 'end') { sw('go'); document.getElementById('fl').innerHTML = "<li>Game Over!</li>"; }
+                }
+            };
         }
 
         function ulb() {
             let u = document.getElementById('pl'); u.innerHTML = "";
-            Object.keys(pld).forEach(p => { let i = document.createElement('li'); i.innerText = "👤 Player: " + p; u.appendChild(i); });
+            Object.keys(pld).forEach(p => { let i = document.createElement('li'); i.innerText = "👤 Player Joined: " + p; u.appendChild(i); });
         }
 
         function st() {
             if (Object.keys(pld).length === 0) return alert("Wait for players!");
-            roomRef.put({ state: 'game', qidx: 0 });
-            hlp();
+            send({ type: 'start', i: 0 }); hlp();
         }
 
         function hlp() {
@@ -125,48 +177,23 @@
                 document.getElementById('hq').innerText = qd[qidx].q;
                 setTimeout(() => {
                     qidx++;
-                    if (qidx < qd.length) { roomRef.put({ qidx: qidx }); hlp(); }
-                    else { roomRef.put({ state: 'end' }); fin(); }
+                    if (qidx < qd.length) { send({ type: 'nxt', i: qidx }); hlp(); }
+                    else { send({ type: 'end' }); fin(); }
                 }, 10000);
             }
         }
 
         function uhg() {
             let u = document.getElementById('lb'); u.innerHTML = "";
-            Object.keys(pld).sort((a,b) => pld[a].s - pld[b].s).forEach((p, i) => {
+            Object.keys(pld).sort((a,b) => pld[b].s - pld[a].s).forEach((p, i) => {
                 let l = document.createElement('li'); l.innerHTML = `#${i+1} <b>${p}</b>: 🪙 ${pld[p].s} Gold`; u.appendChild(l);
             });
         }
 
         function fin() {
             sw('go'); let u = document.getElementById('fl'); u.innerHTML = "";
-            Object.keys(pld).sort((a,b) => pld[a].s - pld[b].s).forEach((p, i) => {
+            Object.keys(pld).sort((a,b) => pld[b].s - pld[a].s).forEach((p, i) => {
                 let l = document.createElement('li'); l.innerText = `🏆 #${i+1}: ${p} (${pld[p].s} Gold)`; u.appendChild(l);
-            });
-        }
-
-        function g() {
-            pin = document.getElementById('p').value.trim();
-            name = document.getElementById('n').value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-            if (!pin || !name) return alert('Enter fields!');
-            
-            sw('wait');
-            document.getElementById('wait-msg').innerText = "Connecting to Host Room PIN " + pin + "...";
-            
-            roomRef = gun.get('room_' + pin);
-            
-            // Add player path directly to the host mesh
-            roomRef.get('players').get(name).put({ score: 0 });
-            
-            roomRef.on((data) => {
-                if (!data) return;
-                document.getElementById('wait-msg').innerText = "✅ Joined successfully! Waiting for host...";
-                if (data.state === 'game') { qidx = data.qidx; lq(); }
-                if (data.state === 'end') { sw('go'); document.getElementById('fl').innerHTML = "<li>Game Over!</li>"; }
-            });
-
-            roomRef.get('players').get(name).on((data) => {
-                if (data) { gold = data.score; document.getElementById('gold').innerText = gold; }
             });
         }
 
@@ -184,12 +211,11 @@
 
         function chst() {
             let a = Math.floor(Math.random() * 40) + 15; alert(`You got +${a} Gold!`);
-            roomRef.get('players').get(name).put({ score: gold + a });
-            sw('wait');
+            send({ type: 'score', n: name, v: a }); sw('wait');
             document.getElementById('wait-msg').innerText = "Waiting for next question...";
         }
 
-        function stopGame() { if(roomRef && host) { roomRef.put(null); } location.reload(); }
+        function stopGame() { if(pc) pc.close(); location.reload(); }
     </script>
 </body>
 </html>
