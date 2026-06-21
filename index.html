@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QuizQuest</title>
+    <title>Quiz</title>
     <style>
-        /* Strict rules to keep text completely inside screen borders */
+        /* Strict full screen width container lock */
         * { box-sizing: border-box; margin: 0; padding: 0; max-width: 90vw; }
         body { font-family: sans-serif; background: #121214; color: #fff; padding: 10px; overflow-x: hidden; }
         div { width: 90vw; margin: 10px auto; display: block; word-wrap: break-word; }
@@ -18,11 +18,11 @@
 </head>
 <body>
 
-    <h1>🚀 QuizQuest P2P</h1>
+    <h1>🚀 QuizQuest</h1>
 
     <div id="m">
-        <button onclick="h()">🏠 Host Game</button>
-        <button onclick="s()">📱 Join Game</button>
+        <button onclick="h()">Host Game</button>
+        <button onclick="s()">Join Game</button>
     </div>
 
     <div id="j" class="hidden">
@@ -88,8 +88,8 @@
         function s() { sw('j'); }
 
         function initWS() {
-            // Public browser-safe server that works perfectly on Safari/iOS
-            ws = new WebSocket('wss://://socketsbay.com');
+            // Free, fast public room network channel cluster
+            ws = new WebSocket('wss://://piesocket.com');
             
             ws.onmessage = (e) => {
                 let msg = JSON.parse(e.data);
@@ -198,6 +198,7 @@
     </script>
 </body>
 </html>
+
 
 
 
