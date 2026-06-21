@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QuizQuest</title>
-    <!-- Trystero Library: 100% Free Cross-Browser Multiplayer with No API Keys -->
+    <!-- Trystero Library: Free Cross-Browser Multiplayer with No API Keys -->
     <script src="https://unpkg.com"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; max-width: 90vw; }
@@ -62,10 +62,10 @@
     <div id="pg" class="hidden">
         <h2 id="gold">🪙 Gold: 0</h2>
         <h3 id="pq-text" style="margin: 10px 0; color:#e43f5a;">Question text</h3>
-        <button onclick="ans(0)" id="b0" style="background:#1e1b4b;"></button>
-        <button onclick="ans(1)" id="b1" style="background:#1e1b4b;"></button>
-        <button onclick="ans(2)" id="b2" style="background:#1e1b4b;"></button>
-        <button onclick="ans(3)" id="b3" style="background:#1e1b4b;"></button>
+        <button onclick="ans(0)" id="b0" style="background:#1e1b4b; margin: 8px 0;"></button>
+        <button onclick="ans(1)" id="b1" style="background:#1e1b4b; margin: 8px 0;"></button>
+        <button onclick="ans(2)" id="b2" style="background:#1e1b4b; margin: 8px 0;"></button>
+        <button onclick="ans(3)" id="b3" style="background:#1e1b4b; margin: 8px 0;"></button>
     </div>
 
     <!-- CHEST VIEW -->
@@ -104,10 +104,10 @@
             host = true; pin = Math.floor(1000 + Math.random() * 9000).toString();
             document.getElementById('l').innerText = pin; sw('hl');
             
-            // Connect to Trystero BitTorrent web mesh securely
-            room = trystero.joinRoom({appId: 'blooket-mini-clone-app'}, pin);
+            // Connect to Trystero Nostr Web Mesh
+            room = trystero.joinRoom({appId: 'blooket-safari-cross-match-p2p'}, pin);
             
-            // Register Data Channel Triggers
+            // Register channels safely before peer signals launch
             const [bindJoin] = room.makeAction('join');
             const [bindScore] = room.makeAction('score');
             [sendStart] = room.makeAction('start');
@@ -167,8 +167,9 @@
             name = document.getElementById('n').value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
             if (!pin || !name) return alert('Enter Pin and Nickname!');
             
-            room = trystero.joinRoom({appId: 'blooket-mini-clone-app'}, pin);
+            room = trystero.joinRoom({appId: 'blooket-safari-cross-match-p2p'}, pin);
             
+            // Build data listeners first so connection is ready
             [sendJoin] = room.makeAction('join');
             [sendScore] = room.makeAction('score');
             const [bindStart] = room.makeAction('start');
@@ -176,6 +177,7 @@
             const [bindEnd] = room.makeAction('end');
             const [bindSync] = room.makeAction('sync');
 
+            // Send username data immediately upon finding host link
             room.onPeerJoin(() => {
                 sendJoin({ n: name });
                 sw('wait');
@@ -208,6 +210,7 @@
     </script>
 </body>
 </html>
+
 
 
 
