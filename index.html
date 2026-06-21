@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>QuizQuest Wifi</title>
+    <title>QuizQuest Custom</title>
     <style>
-        /* Strict blocks to prevent text spilling on phones and tablets */
         * { box-sizing: border-box; margin: 0; padding: 0; max-width: 90vw; }
         body { font-family: sans-serif; background: #121214; color: #fff; padding: 10px; overflow-x: hidden; text-align: center; }
         div { width: 90vw; margin: 8px auto; display: block; word-wrap: break-word; }
@@ -21,13 +20,11 @@
 
     <h1>🚀 QuizQuest Custom</h1>
 
-    <!-- HOME SCREEN -->
     <div id="m">
-        <button onclick="h()">🏠 Host Game</button>
-        <button onclick="s()">📱 Join Game</button>
+        <button onclick="h()">Host Game</button>
+        <button onclick="s()">Join Game</button>
     </div>
 
-    <!-- JOIN INPUT SCREEN -->
     <div id="j" class="hidden">
         <input type="text" id="p" placeholder="Enter Room PIN Code">
         <input type="text" id="n" placeholder="Nickname">
@@ -35,7 +32,6 @@
         <button onclick="stopGame()">Quit</button>
     </div>
 
-    <!-- HOST LOBBY ROOM -->
     <div id="hl" class="hidden">
         <h2>ROOM PIN: <span id="l" style="color:#22c55e;">0000</span></h2>
         <h3>Players Joined (<span id="count">0</span>/30):</h3>
@@ -44,20 +40,17 @@
         <button onclick="stopGame()">Close Server</button>
     </div>
 
-    <!-- PLAYER WAIT BOX -->
     <div id="wait" class="hidden">
         <p id="wait-msg">Connecting to room...</p>
         <button onclick="stopGame()">Leave</button>
     </div>
 
-    <!-- HOST GAME LEADERBOARD -->
     <div id="hg" class="hidden">
         <div class="banner">⏱️ Time Remaining: <span id="host-timer">5:00</span></div>
         <ul id="lb"></ul>
         <button onclick="stopGame()">Force Stop</button>
     </div>
 
-    <!-- PLAYER INTERFACE -->
     <div id="pg" class="hidden">
         <div class="banner">⏱️ Clock: <span id="player-timer">5:00</span></div>
         <h2>🪙 Gold: <span id="gold">0</span></h2>
@@ -68,7 +61,6 @@
         <button onclick="ans(3)" id="b3" style="background:#1e1b4b; margin: 8px 0;"></button>
     </div>
 
-    <!-- CHEST SELECTION -->
     <div id="ch" class="hidden">
         <h2>Pick a Chest</h2>
         <button onclick="chst()" style="background:#eab308; color:#000;">🎁 Chest 1</button>
@@ -76,7 +68,6 @@
         <button onclick="chst()" style="background:#eab308; color:#000;">🎁 Chest 3</button>
     </div>
 
-    <!-- RESULTS PODIUM -->
     <div id="go" class="hidden">
         <h2>Final Standings 🏆</h2>
         <ul id="fl"></ul>
@@ -84,17 +75,16 @@
     </div>
 
     <script>
-        // Backup starting pool
-        let qd = [{ q: "Loading your questions.txt...", a: ["", "", "", ""], c: 0 }];
+        let qd = [{ q: "Error: questions.txt missing or broken!", a: ["", "", "", ""], c: 0 }];
         let host = false, name = "", qidx = 0, pld = {}, gold = 0, pin = "";
         let timeRemaining = 300, countdownInterval;
         const pipe = new BroadcastChannel('quiz_lan_channel');
 
-        // Automatically load file from GitHub folder path
+        // Look right next to index.html for questions.txt file
         async function loadCustomQuestions() {
             try {
-                let response = await fetch('questions.txt');
-                if (response.ok) { qd = await response.json(); }
+                let r = await fetch('./questions.txt?v=' + Date.now());
+                if (r.ok) { qd = await r.json(); }
             } catch(e) {}
         }
         loadCustomQuestions();
@@ -146,6 +136,12 @@
             }, 1000);
         }
         function stopTimerLoop() { clearInterval(countdownInterval); }
+
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && !host && pin) {
+                send({ type: 'join', n: name });
+            }
+        });
 
         function updateTimerDisplays(seconds) {
             let m = Math.floor(seconds / 60); let s = seconds % 60;
@@ -199,6 +195,7 @@
     </script>
 </body>
 </html>
+
 
 
 
