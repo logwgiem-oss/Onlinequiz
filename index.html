@@ -14,11 +14,12 @@
         .hidden { display: none !important; }
         ul { list-style: none; text-align: left; }
         li { background: #222; margin: 5px 0; padding: 10px; border-radius: 4px; word-break: break-all; }
+        .banner { font-size: 20px; font-weight: bold; color: #e43f5a; margin: 10px 0; }
     </style>
 </head>
 <body>
 
-    <h1>🚀 QuizQuest Wi-Fi</h1>
+    <h1>🚀 QuizQuest Custom</h1>
 
     <!-- HOME SCREEN -->
     <div id="m">
@@ -39,7 +40,7 @@
         <h2>ROOM PIN: <span id="l" style="color:#22c55e;">0000</span></h2>
         <h3>Players Joined (<span id="count">0</span>/30):</h3>
         <ul id="pl"></ul>
-        <button onclick="st()">▶️ Start Quiz</button>
+        <button onclick="st()">▶️ Start Quiz (5 Minutes)</button>
         <button onclick="stopGame()">Close Server</button>
     </div>
 
@@ -51,13 +52,14 @@
 
     <!-- HOST GAME LEADERBOARD -->
     <div id="hg" class="hidden">
-        <h2 id="hq">Loading question...</h2>
+        <div class="banner">⏱️ Time Remaining: <span id="host-timer">5:00</span></div>
         <ul id="lb"></ul>
         <button onclick="stopGame()">Force Stop</button>
     </div>
 
     <!-- PLAYER INTERFACE -->
     <div id="pg" class="hidden">
+        <div class="banner">⏱️ Clock: <span id="player-timer">5:00</span></div>
         <h2>🪙 Gold: <span id="gold">0</span></h2>
         <h3 id="pq-text" style="margin: 10px 0; color:#e43f5a;">Question text</h3>
         <button onclick="ans(0)" id="b0" style="background:#1e1b4b; margin: 8px 0;"></button>
@@ -82,15 +84,20 @@
     </div>
 
     <script>
-        const qd = [
-            { q: "What is 5 + 7?", a: ["10", "12", "14", "11"], c: 1 },
-            { q: "Which planet is Red?", a: ["Earth", "Mars", "Jupiter", "Venus"], c: 1 },
-            { q: "Capital of France?", a: ["London", "Berlin", "Paris", "Rome"], c: 2 }
-        ];
-        
+        // Backup starting pool
+        let qd = [{ q: "Loading your questions.txt...", a: ["", "", "", ""], c: 0 }];
         let host = false, name = "", qidx = 0, pld = {}, gold = 0, pin = "";
-        
+        let timeRemaining = 300, countdownInterval;
         const pipe = new BroadcastChannel('quiz_lan_channel');
+
+        // Automatically load file from GitHub folder path
+        async function loadCustomQuestions() {
+            try {
+                let response = await fetch('questions.txt');
+                if (response.ok) { qd = await response.json(); }
+            } catch(e) {}
+        }
+        loadCustomQuestions();
 
         function sw(id) {
             ['m', 'j', 'hl', 'wait', 'hg', 'pg', 'ch', 'go'].forEach(s => document.getElementById(s).classList.add('hidden'));
@@ -99,70 +106,52 @@
         function s() { sw('j'); }
 
         pipe.onmessage = (e) => {
-            let msg = e.data;
-            if (msg.pin !== pin) return;
-
+            let msg = e.data; if (msg.pin !== pin) return;
             if (host) {
                 if (msg.type === 'join') {
-                    // Lock room entries if user size reaches exactly 30 people max
-                    if (Object.keys(pld).length >= 30) {
-                        pipe.postMessage({ pin: pin, type: 'full', n: msg.n });
-                        return;
-                    }
-                    pld[msg.n] = { s: 0 }; ulb();
-                    send({ type: 'sync', d: pld });
+                    if (Object.keys(pld).length >= 30) { pipe.postMessage({ pin: pin, type: 'full', n: msg.n }); return; }
+                    pld[msg.n] = { s: 0 }; ulb(); send({ type: 'sync', d: pld, questions: qd });
                 }
-                if (msg.type === 'score') {
-                    pld[msg.n].s += msg.v; uhg();
-                    send({ type: 'sync', d: pld });
-                }
+                if (msg.type === 'score') { pld[msg.n].s += msg.v; send({ type: 'sync', d: pld }); }
             } else {
-                if (msg.type === 'full' && msg.n === name) {
-                    alert("This room lobby is full! (Max 30 players)");
-                    stopGame();
-                }
+                if (msg.type === 'full' && msg.n === name) { alert("Lobby full!"); stopGame(); }
                 if (msg.type === 'sync') {
-                    document.getElementById('wait-msg').innerText = "✅ Joined successfully! Waiting for host to start...";
+                    document.getElementById('wait-msg').innerText = "✅ Ready! Waiting for host...";
+                    if (msg.questions) qd = msg.questions; 
                     if(msg.d[name] !== undefined) { gold = msg.d[name].s; document.getElementById('gold').innerText = gold; }
                 }
-                if (msg.type === 'start' || msg.type === 'nxt') { qidx = msg.i; lq(); }
-                if (msg.type === 'end') { sw('go'); document.getElementById('fl').innerHTML = "<li>Game Over! Check Host screen.</li>"; }
+                if (msg.type === 'start') { startTimerLoop(); qidx = 0; lq(); }
+                if (msg.type === 'time-tick') { updateTimerDisplays(msg.value); }
+                if (msg.type === 'end') { stopTimerLoop(); sw('go'); updateFinalPodium(msg.d); }
             }
         };
 
-        function send(obj) {
-            obj.pin = pin;
-            obj.stamp = Date.now();
-            pipe.postMessage(obj);
-        }
-
-        function h() {
-            host = true; pin = Math.floor(1000 + Math.random() * 9000).toString();
-            document.getElementById('l').innerText = pin; sw('hl');
-        }
-
+        function send(obj) { obj.pin = pin; obj.stamp = Date.now(); pipe.postMessage(obj); }
+        function h() { host = true; pin = Math.floor(1000 + Math.random() * 9000).toString(); document.getElementById('l').innerText = pin; sw('hl'); }
         function ulb() {
             let u = document.getElementById('pl'); u.innerHTML = "";
-            let keys = Object.keys(pld);
-            document.getElementById('count').innerText = keys.length;
+            let keys = Object.keys(pld); document.getElementById('count').innerText = keys.length;
             keys.forEach(p => { let i = document.createElement('li'); i.innerText = "👤 Player Joined: " + p; u.appendChild(i); });
         }
+        function st() { if (Object.keys(pld).length === 0) return alert("Wait for players!"); send({ type: 'start' }); sw('hg'); startTimerLoop(); }
 
-        function st() {
-            if (Object.keys(pld).length === 0) return alert("Wait for players to join!");
-            send({ type: 'start', i: 0 }); hlp();
+        function startTimerLoop() {
+            timeRemaining = 300;
+            countdownInterval = setInterval(() => {
+                timeRemaining--;
+                if (host) {
+                    send({ type: 'time-tick', value: timeRemaining }); updateTimerDisplays(timeRemaining);
+                    if (timeRemaining <= 0) { send({ type: 'end', d: pld }); stopTimerLoop(); sw('go'); updateFinalPodium(pld); }
+                }
+            }, 1000);
         }
+        function stopTimerLoop() { clearInterval(countdownInterval); }
 
-        function hlp() {
-            sw('hg');
-            if (qidx < qd.length) {
-                document.getElementById('hq').innerText = "Question " + (qidx+1) + ": " + qd[qidx].q; uhg();
-                setTimeout(() => {
-                    qidx++;
-                    if (qidx < qd.length) { send({ type: 'nxt', i: qidx }); hlp(); }
-                    else { send({ type: 'end' }); fin(); }
-                }, 10000);
-            }
+        function updateTimerDisplays(seconds) {
+            let m = Math.floor(seconds / 60); let s = seconds % 60;
+            let displayString = m + ":" + (s < 10 ? "0" : "") + s;
+            if (host) { document.getElementById('host-timer').innerText = displayString; uhg(); } 
+            else { document.getElementById('player-timer').innerText = displayString; }
         }
 
         function uhg() {
@@ -171,50 +160,42 @@
                 let l = document.createElement('li'); l.innerHTML = `#${i+1} <b>${p}</b>: 🪙 ${pld[p].s} Gold`; u.appendChild(l);
             });
         }
-
-        function fin() {
-            sw('go'); let u = document.getElementById('fl'); u.innerHTML = "";
-            Object.keys(pld).sort((a,b) => pld[b].s - pld[a].s).forEach((p, i) => {
-                let l = document.createElement('li'); l.innerText = `🏆 #${i+1}: ${p} (${pld[p].s} Gold)`; u.appendChild(l);
+        function updateFinalPodium(playersData) {
+            let u = document.getElementById('fl'); u.innerHTML = "";
+            Object.keys(playersData).sort((a,b) => playersData[b].s - playersData[a].s).forEach((p, i) => {
+                let l = document.createElement('li'); l.innerText = `🏆 #${i+1}: ${p} (${playersData[p].s} Gold)`; u.appendChild(l);
             });
         }
-
         function g() {
-            pin = document.getElementById('p').value.trim();
-            name = document.getElementById('n').value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+            pin = document.getElementById('p').value.trim(); name = document.getElementById('n').value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
             if (!pin || !name) return alert('Enter Pin and Nickname!');
-            
             sw('wait');
-            document.getElementById('wait-msg').innerText = "Connecting to PIN room " + pin + "...";
-            
             let localLoop = setInterval(() => {
-                if (document.getElementById('wait-msg').innerText.includes("✅")) {
-                    clearInterval(localLoop);
-                } else {
-                    send({ type: 'join', n: name });
-                }
+                if (document.getElementById('wait-msg').innerText.includes("✅")) { clearInterval(localLoop); } 
+                else { send({ type: 'join', n: name }); }
             }, 1000);
         }
 
         function lq() {
-            sw('pg'); let q = qd[qidx];
-            document.getElementById('pq-text').innerText = "Question " + (qidx+1) + ": " + q.q;
+            sw('pg'); let q = qd[qidx]; document.getElementById('pq-text').innerText = "Question: " + q.q;
             for(let i=0; i<4; i++) { let b = document.getElementById('b'+i); b.innerText = q.a[i]; b.disabled = false; }
         }
 
         function ans(i) {
-            for(let j=0; j<4; j++) document.getElementById('b'+j).disabled = true;
-            if (i === qd[qidx].c) { setTimeout(() => sw('ch'), 400); }
-            else { sw('wait'); document.getElementById('wait-msg').innerText = "Wrong! Waiting for next question..."; }
+            let btns = [document.getElementById('b0'), document.getElementById('b1'), document.getElementById('b2'), document.getElementById('b3')];
+            btns.forEach(b => b.disabled = true);
+            if (i === qd[qidx].c) { setTimeout(() => { sw('ch'); }, 200); } 
+            else {
+                document.getElementById('pq-text').innerText = "❌ Incorrect! Lock-out penalty (3s)...";
+                setTimeout(() => { advanceNextQuestion(); }, 3000);
+            }
         }
-
         function chst() {
             let a = Math.floor(Math.random() * 40) + 15; alert(`You got +${a} Gold!`);
-            send({ type: 'score', n: name, v: a }); sw('wait');
-            document.getElementById('wait-msg').innerText = "Waiting for next question...";
+            send({ type: 'score', n: name, v: a }); advanceNextQuestion();
         }
-
-        function stopGame() { pipe.close(); location.reload(); }
+        function advanceNextQuestion() { qidx++; if (qidx >= qd.length) qidx = 0; lq(); }
+        function stopGame() { stopTimerLoop(); pipe.close(); location.reload(); }
     </script>
 </body>
 </html>
