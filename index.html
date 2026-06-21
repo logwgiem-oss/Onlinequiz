@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quiz</title>
+    <title>Blooket Clone</title>
+    <!-- Include the Latest Stable Ably Engine for Browser Connections -->
     <script src="https://ably.com"></script>
     <style>
-        /* Strict rules to force everything inside the screen borders */
-        * { box-sizing: border-box; margin: 0; padding: 0; max-width: 90vw; }
+        * { box-sizing: border-box; margin: 0; padding: 0; max-width: 92vw; }
         body { font-family: sans-serif; background: #121214; color: #fff; padding: 10px; overflow-x: hidden; }
-        div { width: 90vw; margin: 10px auto; display: block; word-wrap: break-word; }
+        div { width: 90vw; margin: 8px auto; display: block; word-wrap: break-word; }
         input, select, button { width: 100%; padding: 12px; margin: 5px 0; font-size: 16px; display: block; white-space: normal; }
-        button { background: #e43f5a; color: #fff; border: none; border-radius: 5px; cursor: pointer; }
+        button { background: #e43f5a; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
         .hidden { display: none !important; }
         ul { list-style: none; text-align: left; }
         li { background: #222; margin: 5px 0; padding: 10px; border-radius: 4px; word-break: break-all; }
@@ -19,59 +19,69 @@
 </head>
 <body>
 
-    <h1>QuizQuest</h1>
+    <h1>🚀 QuizQuest Mini</h1>
 
+    <!-- SCREEN 1: START ROLE OPTION -->
     <div id="m">
         <button onclick="h()">🏠 Host Game</button>
         <button onclick="s()">📱 Join Game</button>
     </div>
 
+    <!-- SCREEN 2: NICKNAME INPUTS -->
     <div id="j" class="hidden">
-        <input type="text" id="p" placeholder="PIN">
-        <input type="text" id="n" placeholder="Nickname">
-        <button onclick="g()">Join</button>
+        <input type="text" id="p" placeholder="Enter 4-Digit PIN">
+        <input type="text" id="n" placeholder="Enter Nickname">
+        <button onclick="joinGame()">Enter Lobby Room</button>
     </div>
 
+    <!-- SCREEN 3: WAITING ROOM HOUSES -->
     <div id="hl" class="hidden">
         <h2>PIN: <span id="l" style="color:#22c55e">0000</span></h2>
         <ul id="pl"></ul>
-        <button onclick="st()">▶️ Start</button>
+        <button onclick="st()">▶️ Start Quiz Now</button>
     </div>
 
+    <!-- SCREEN 4: LOBBY WAIT TEXT -->
     <div id="wait" class="hidden">
-        <p>Waiting for host...</p>
+        <p>Connected! Waiting for host to click start...</p>
     </div>
 
+    <!-- SCREEN 5: MAIN BOARD DISPLAY -->
     <div id="hg" class="hidden">
-        <h2 id="hq">Loading...</h2>
+        <h2 id="hq">Loading questions...</h2>
         <ul id="lb"></ul>
     </div>
 
+    <!-- SCREEN 6: MOBILE TOUCH DISPLAY FOR ANSWERS -->
     <div id="pg" class="hidden">
-        <h2 id="gold">🪙 Gold: 0</h2>
-        <button onclick="ans(0)" id="b0"></button>
-        <button onclick="ans(1)" id="b1"></button>
-        <button onclick="ans(2)" id="b2"></button>
-        <button onclick="ans(3)" id="b3"></button>
+        <div class="score">Your Total Gold: 🪙 <span id="player-gold">0</span></div>
+        <h2 id="pq-text" style="color:#e43f5a; margin-bottom:10px;">Question text goes here</h2>
+        <button onclick="ans(0)" id="b0" style="background:#1e1b4b; margin:10px 0;"></button>
+        <button onclick="ans(1)" id="b1" style="background:#1e1b4b; margin:10px 0;"></button>
+        <button onclick="ans(2)" id="b2" style="background:#1e1b4b; margin:10px 0;"></button>
+        <button onclick="ans(3)" id="b3" style="background:#1e1b4b; margin:10px 0;"></button>
     </div>
 
+    <!-- SCREEN 7: TREASURE ITEMS BOXES -->
     <div id="ch" class="hidden">
-        <h2>Pick a Chest</h2>
-        <button onclick="chst()">🎁 Chest 1</button>
-        <button onclick="chst()">🎁 Chest 2</button>
-        <button onclick="chst()">🎁 Chest 3</button>
+        <h2>Pick an Item Chest</h2>
+        <button onclick="chst()" style="background:#eab308; color:#000;">🎁 Chest #1</button>
+        <button onclick="chst()" style="background:#eab308; color:#000;">🎁 Chest #2</button>
+        <button onclick="chst()" style="background:#eab308; color:#000;">🎁 Chest #3</button>
     </div>
 
+    <!-- SCREEN 8: TARGET CHOICE SYSTEM -->
     <div id="tg" class="hidden">
-        <h2 id="at">Target</h2>
+        <h2 id="at">Target Action</h2>
         <select id="ts"></select>
-        <button onclick="cf()">Confirm</button>
+        <button onclick="cf()">Confirm Strategy</button>
     </div>
 
+    <!-- SCREEN 9: RESULTS SCROLL -->
     <div id="go" class="hidden">
-        <h2>Final Standings 🏆</h2>
+        <h2>Final Leaderboard Standings 🏆</h2>
         <ul id="fl"></ul>
-        <button onclick="location.reload()">Play Again</button>
+        <button onclick="location.reload()">Return Home</button>
     </div>
 
     <script>
@@ -107,14 +117,14 @@
 
         function ulb() {
             let u = document.getElementById('pl'); u.innerHTML = "";
-            Object.keys(pld).forEach(p => { let i = document.createElement('li'); i.innerText = "👤 " + p; u.appendChild(i); });
+            Object.keys(pld).forEach(p => { let i = document.createElement('li'); i.innerText = "👤 Player Connected: " + p; u.appendChild(i); });
         }
         function st() { ch.publish('start', { i: 0 }); hlp(); }
 
         function hlp() {
             sw('hg');
             if (qidx < qd.length) {
-                document.getElementById('hq').innerText = qd[qidx].q; uhg();
+                document.getElementById('hq').innerText = "Question " + (qidx+1) + ": " + qd[qidx].q; uhg();
                 setTimeout(() => {
                     qidx++;
                     if (qidx < qd.length) { ch.publish('nxt', { i: qidx }); hlp(); }
@@ -126,36 +136,32 @@
         function uhg() {
             let u = document.getElementById('lb'); u.innerHTML = "";
             Object.keys(pld).sort((a,b) => pld[b].s - pld[a].s).forEach((p, i) => {
-                let l = document.createElement('li'); l.innerHTML = `#${i+1} <b>${p}</b>: 🪙 ${pld[p].s}`; u.appendChild(l);
+                let l = document.createElement('li'); l.innerHTML = `#${i+1} <b>${p}</b>: 🪙 ${pld[p].s} Gold`; u.appendChild(l);
             });
         }
         function fin() {
             sw('go'); let u = document.getElementById('fl'); u.innerHTML = "";
             Object.keys(pld).sort((a,b) => pld[b].s - pld[a].s).forEach((p, i) => {
-                let l = document.createElement('li'); l.innerText = `🏆 #${i+1}: ${p} (${pld[p].s})`; u.appendChild(l);
+                let l = document.createElement('li'); l.innerText = `🏆 #${i+1}: ${p} (${pld[p].s} Gold)`; u.appendChild(l);
             });
         }
 
         function joinGame() {
-            // Deprecated fallback mapping to handle legacy event triggers
-            g();
-        }
-
-        function g() {
             pin = document.getElementById('p').value.trim(); name = document.getElementById('n').value.trim();
-            if (!pin || !name) return alert('Error');
+            if (!pin || !name) return alert('Please enter both parameters!');
             ab = new Ably.Realtime({ key: 'h_99gA.7pL6iA:mUv_w1mE542N8g9mZp-lqj9K6j8vP_zIcoX_bY17Wnc' });
             ch = ab.channels.get('r-' + pin);
             ab.connection.on('connected', () => { ch.publish('join', { n: name }); sw('wait'); });
             ch.subscribe('list', (m) => plist = m.data.l);
-            ch.subscribe('sync', (m) => { if(m.data.d[name] !== undefined) { gold = m.data.d[name].s; document.getElementById('gold').innerText = "🪙 Gold: " + gold; } });
+            ch.subscribe('sync', (m) => { if(m.data.d[name] !== undefined) { gold = m.data.d[name].s; document.getElementById('player-gold').innerText = gold; } });
             ch.subscribe('start', (m) => { qidx = m.data.i; lq(); });
             ch.subscribe('nxt', (m) => { qidx = m.data.i; lq(); });
-            ch.subscribe('end', () => { sw('go'); document.getElementById('fl').innerHTML = "<li>Check Host!</li>"; });
+            ch.subscribe('end', () => { sw('go'); document.getElementById('fl').innerHTML = "<li>Game Over. View results on host display screen!</li>"; });
         }
 
         function lq() {
             sw('pg'); let q = qd[qidx];
+            document.getElementById('pq-text').innerText = "Question " + (qidx+1) + ": " + q.q;
             for(let i=0; i<4; i++) { let b = document.getElementById('b'+i); b.innerText = q.a[i]; b.disabled = false; }
         }
 
@@ -168,9 +174,9 @@
         function chst() {
             let r = ["coins", "take", "swap"][Math.floor(Math.random() * 3)];
             if (r === "coins") {
-                let a = Math.floor(Math.random() * 30) + 10; alert(`+${a} Gold!`);
+                let a = Math.floor(Math.random() * 30) + 10; alert(`You discovered +${a} Gold!`);
                 ch.publish('act', { f: name, t: null, y: "add", v: a }); sw('wait');
-            } else { act = r; tg(r === "take" ? "STEAL 20%" : "SWAP scores"); }
+            } else { act = r; tg(r === "take" ? "STEAL 20% SCORE" : "SWAP SCORE STATUS"); }
         }
 
         function tg(t) {
@@ -190,3 +196,4 @@
     </script>
 </body>
 </html>
+
