@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QuizQuest Direct</title>
+    <title>QuizQuest Mini</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; max-width: 90vw; }
         body { font-family: sans-serif; background: #121214; color: #fff; padding: 10px; overflow-x: hidden; text-align: center; }
@@ -20,28 +20,26 @@
     <h1>🚀 QuizQuest Live</h1>
 
     <div id="m">
-        <button onclick="h()">🏠 Host Game</button>
-        <button onclick="s()">📱 Join Game</button>
+        <button onclick="h()">Host Game</button>
+        <button onclick="s()">Join Game</button>
     </div>
 
     <div id="j" class="hidden">
-        <input type="text" id="p" placeholder="Paste the Host Code here">
+        <input type="text" id="p" placeholder="Enter Room PIN Code">
         <input type="text" id="n" placeholder="Nickname">
         <button onclick="g()">Join Lobby</button>
         <button onclick="stopGame()">Quit</button>
     </div>
 
     <div id="hl" class="hidden">
-        <h2>YOUR HOST CODE:</h2>
-        <input type="text" id="l" readonly onclick="this.select()" style="background:#222; color:#22c55e; font-size:12px; text-align:center;">
-        <p style="margin: 5px 0; color:#aaa;">(Click code above, copy it, and send it to your friends)</p>
+        <h2>YOUR PIN CODE: <span id="l" style="color:#22c55e;">Generating...</span></h2>
         <ul id="pl"></ul>
         <button onclick="st()">▶️ Start Quiz</button>
         <button onclick="stopGame()">Close Server</button>
     </div>
 
     <div id="wait" class="hidden">
-        <p id="wait-msg">Waiting for host to start...</p>
+        <p id="wait-msg">Connecting to room relay...</p>
         <button onclick="stopGame()">Leave</button>
     </div>
 
@@ -54,10 +52,10 @@
     <div id="pg" class="hidden">
         <h2>🪙 Gold: <span id="gold">0</span></h2>
         <h3 id="pq-text" style="margin: 10px 0; color:#e43f5a;">Question</h3>
-        <button onclick="ans(0)" id="b0" style="background:#1e1b4b;"></button>
-        <button onclick="ans(1)" id="b1" style="background:#1e1b4b;"></button>
-        <button onclick="ans(2)" id="b2" style="background:#1e1b4b;"></button>
-        <button onclick="ans(3)" id="b3" style="background:#1e1b4b;"></button>
+        <button onclick="ans(0)" id="b0" style="background:#1e1b4b; margin: 8px 0;"></button>
+        <button onclick="ans(1)" id="b1" style="background:#1e1b4b; margin: 8px 0;"></button>
+        <button onclick="ans(2)" id="b2" style="background:#1e1b4b; margin: 8px 0;"></button>
+        <button onclick="ans(3)" id="b3" style="background:#1e1b4b; margin: 8px 0;"></button>
     </div>
 
     <div id="ch" class="hidden">
@@ -80,7 +78,7 @@
             { q: "Capital of France?", a: ["London", "Berlin", "Paris", "Rome"], c: 2 }
         ];
         
-        let pc, dataChannel, host = false, name = "", qidx = 0, pld = {}, gold = 0;
+        let ws, host = false, name = "", qidx = 0, pld = {}, gold = 0, pin = "";
 
         function sw(id) {
             ['m', 'j', 'hl', 'wait', 'hg', 'pg', 'ch', 'go'].forEach(s => document.getElementById(s).classList.add('hidden'));
@@ -88,77 +86,50 @@
         }
         function s() { sw('j'); }
 
-        function send(obj) {
-            if (dataChannel && dataChannel.readyState === 'open') {
-                dataChannel.send(JSON.stringify(obj));
-            }
-        }
-
-        // HOST CONNECTIVE LOGIC
-        function h() {
-            host = true; sw('hl');
-            pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:://google.com' }] });
+        function initWS() {
+            // Public unblocked network cluster key
+            ws = new WebSocket('wss://://piesocket.com');
             
-            dataChannel = pc.createDataChannel("quizChannel");
-            setupChannelEvents();
-
-            pc.onicecandidate = (e) => {
-                if (!e.candidate) {
-                    // Turn connection data into a simple compressed text string
-                    document.getElementById('l').value = btoa(JSON.stringify(pc.localDescription));
+            ws.onopen = () => {
+                if (!host) {
+                    // Send join alerts continuously until the host captures it
+                    setInterval(() => { send({ type: 'join', n: name }); }, 1500);
                 }
             };
 
-            pc.createOffer().then(offer => pc.setLocalDescription(offer));
-        }
-
-        // PLAYER CONNECTIVE LOGIC
-        function g() {
-            let code = document.getElementById('p').value.trim();
-            name = document.getElementById('n').value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-            if (!code || !name) return alert('Fill in all fields!');
-            
-            sw('wait');
-            
-            pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:://google.com' }] });
-            
-            pc.ondatachannel = (e) => {
-                dataChannel = e.channel;
-                setupChannelEvents();
-                setTimeout(() => { send({ type: 'join', n: name }); }, 500);
-            };
-
-            let offer = JSON.parse(atob(code));
-            pc.setRemoteDescription(new RTCSessionDescription(offer))
-              .then(() => pc.createAnswer())
-              .then(answer => pc.setLocalDescription(answer))
-              .then(() => {
-                  pc.onicecandidate = (e) => {
-                      if (!e.candidate) {
-                          // Copy this answer code back to host text to link sockets
-                          console.log("Answer generated");
-                      }
-                  };
-              });
-        }
-
-        function setupChannelEvents() {
-            dataChannel.onopen = () => {
-                if(!host) document.getElementById('wait-msg').innerText = "✅ Connection established! Waiting for host to start...";
-            };
-            dataChannel.onmessage = (e) => {
+            ws.onmessage = (e) => {
                 let msg = JSON.parse(e.data);
+                if (msg.pin !== pin) return;
+
                 if (host) {
-                    if (msg.type === 'join') { pld[msg.n] = { s: 0 }; ulb(); send({ type: 'sync', d: pld }); }
-                    if (msg.type === 'score') { pld[msg.n].s += msg.v; uhg(); send({ type: 'sync', d: pld }); }
+                    if (msg.type === 'join') {
+                        pld[msg.n] = { s: 0 }; ulb();
+                        send({ type: 'sync', d: pld });
+                    }
+                    if (msg.type === 'score') {
+                        pld[msg.n].s += msg.v; uhg();
+                        send({ type: 'sync', d: pld });
+                    }
                 } else {
                     if (msg.type === 'sync') {
+                        document.getElementById('wait-msg').innerText = "✅ Joined successfully! Waiting for host...";
                         if(msg.d[name] !== undefined) { gold = msg.d[name].s; document.getElementById('gold').innerText = gold; }
                     }
                     if (msg.type === 'start' || msg.type === 'nxt') { qidx = msg.i; lq(); }
-                    if (msg.type === 'end') { sw('go'); document.getElementById('fl').innerHTML = "<li>Game Over!</li>"; }
+                    if (msg.type === 'end') { sw('go'); document.getElementById('fl').innerHTML = "<li>Game Over! Check Host screen.</li>"; }
                 }
             };
+        }
+
+        function send(obj) {
+            obj.pin = pin;
+            if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+        }
+
+        function h() {
+            host = true; pin = Math.floor(1000 + Math.random() * 9000).toString();
+            document.getElementById('l').innerText = pin; sw('hl');
+            initWS();
         }
 
         function ulb() {
@@ -172,9 +143,9 @@
         }
 
         function hlp() {
-            sw('hg'); uhg();
+            sw('hg');
             if (qidx < qd.length) {
-                document.getElementById('hq').innerText = qd[qidx].q;
+                document.getElementById('hq').innerText = qd[qidx].q; uhg();
                 setTimeout(() => {
                     qidx++;
                     if (qidx < qd.length) { send({ type: 'nxt', i: qidx }); hlp(); }
@@ -197,6 +168,16 @@
             });
         }
 
+        function g() {
+            pin = document.getElementById('p').value.trim();
+            name = document.getElementById('n').value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (!pin || !name) return alert('Enter Pin and Nickname!');
+            
+            sw('wait');
+            document.getElementById('wait-msg').innerText = "Connecting to Host PIN " + pin + "...";
+            initWS();
+        }
+
         function lq() {
             sw('pg'); let q = qd[qidx];
             document.getElementById('pq-text').innerText = q.q;
@@ -215,10 +196,11 @@
             document.getElementById('wait-msg').innerText = "Waiting for next question...";
         }
 
-        function stopGame() { if(pc) pc.close(); location.reload(); }
+        function stopGame() { if (ws) { ws.close(); } location.reload(); }
     </script>
 </body>
 </html>
+
 
 
 
