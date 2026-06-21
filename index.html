@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz</title>
+    <script src="https://ably.com"></script>
+    <style>
+        /* Strict rules to force everything inside the screen borders */
+        * { box-sizing: border-box; margin: 0; padding: 0; max-width: 90vw; }
+        body { font-family: sans-serif; background: #121214; color: #fff; padding: 10px; overflow-x: hidden; }
+        div { width: 90vw; margin: 10px auto; display: block; word-wrap: break-word; }
+        input, select, button { width: 100%; padding: 12px; margin: 5px 0; font-size: 16px; display: block; white-space: normal; }
+        button { background: #e43f5a; color: #fff; border: none; border-radius: 5px; cursor: pointer; }
+        .hidden { display: none !important; }
+        ul { list-style: none; text-align: left; }
+        li { background: #222; margin: 5px 0; padding: 10px; border-radius: 4px; word-break: break-all; }
+    </style>
+</head>
+<body>
+
+    <h1>QuizQuest</h1>
+
+    <div id="m">
+        <button onclick="h()">🏠 Host Game</button>
+        <button onclick="s()">📱 Join Game</button>
+    </div>
+
+    <div id="j" class="hidden">
+        <input type="text" id="p" placeholder="PIN">
+        <input type="text" id="n" placeholder="Nickname">
+        <button onclick="g()">Join</button>
+    </div>
+
+    <div id="hl" class="hidden">
+        <h2>PIN: <span id="l" style="color:#22c55e">0000</span></h2>
+        <ul id="pl"></ul>
+        <button onclick="st()">▶️ Start</button>
+    </div>
+
+    <div id="wait" class="hidden">
+        <p>Waiting for host...</p>
+    </div>
+
+    <div id="hg" class="hidden">
+        <h2 id="hq">Loading...</h2>
+        <ul id="lb"></ul>
+    </div>
+
+    <div id="pg" class="hidden">
+        <h2 id="gold">🪙 Gold: 0</h2>
+        <button onclick="ans(0)" id="b0"></button>
+        <button onclick="ans(1)" id="b1"></button>
+        <button onclick="ans(2)" id="b2"></button>
+        <button onclick="ans(3)" id="b3"></button>
+    </div>
+
+    <div id="ch" class="hidden">
+        <h2>Pick a Chest</h2>
+        <button onclick="chst()">🎁 Chest 1</button>
+        <button onclick="chst()">🎁 Chest 2</button>
+        <button onclick="chst()">🎁 Chest 3</button>
+    </div>
+
+    <div id="tg" class="hidden">
+        <h2 id="at">Target</h2>
+        <select id="ts"></select>
+        <button onclick="cf()">Confirm</button>
+    </div>
+
+    <div id="go" class="hidden">
+        <h2>Final Standings 🏆</h2>
+        <ul id="fl"></ul>
+        <button onclick="location.reload()">Play Again</button>
+    </div>
+
+    <script>
+        const qd = [
+            { q: "What is 5 + 7?", a: ["10", "12", "14", "11"], c: 1 },
+            { q: "Which planet is Red?", a: ["Earth", "Mars", "Jupiter", "Venus"], c: 1 },
+            { q: "Capital of France?", a: ["London", "Berlin", "Paris", "Rome"], c: 2 }
+        ];
+        let ab, ch, pin, host = false, name = "", qidx = 0, pld = {}, act = null, gold = 0, plist = [];
+
+        function sw(id) {
+            ['m', 'j', 'hl', 'wait', 'hg', 'pg', 'ch', 'tg', 'go'].forEach(s => document.getElementById(s).classList.add('hidden'));
+            document.getElementById(id).classList.remove('hidden');
+        }
+        function s() { sw('j'); }
+
+        function h() {
+            host = true; pin = Math.floor(1000 + Math.random() * 9000).toString();
+            document.getElementById('l').innerText = pin; sw('hl');
+            ab = new Ably.Realtime({ key: 'h_99gA.7pL6iA:mUv_w1mE542N8g9mZp-lqj9K6j8vP_zIcoX_bY17Wnc' });
+            ch = ab.channels.get('r-' + pin);
+            ch.subscribe('join', (m) => {
+                let p = m.data.n; if (!pld[p]) { pld[p] = { s: 0 }; ulb(); ch.publish('list', { l: Object.keys(pld) }); }
+            });
+            ch.subscribe('act', (m) => {
+                let f = m.data.f, t = m.data.t, type = m.data.y, v = m.data.v;
+                if (type === "add") pld[f].s += v;
+                else if (type === "take" && pld[t]) { let a = Math.floor(pld[t].s * 0.2); pld[t].s -= a; pld[f].s += a; }
+                else if (type === "swap" && pld[t]) { let x = pld[f].s; pld[f].s = pld[t].s; pld[t].s = x; }
+                ch.publish('sync', { d: pld }); uhg();
+            });
+        }
+
+        function ulb() {
+            let u = document.getElementById('pl'); u.innerHTML = "";
+            Object.keys(pld).forEach(p => { let i = document.createElement('li'); i.innerText = "👤 " + p; u.appendChild(i); });
+        }
+        function st() { ch.publish('start', { i: 0 }); hlp(); }
+
+        function hlp() {
+            sw('hg');
+            if (qidx < qd.length) {
+                document.getElementById('hq').innerText = qd[qidx].q; uhg();
+                setTimeout(() => {
+                    qidx++;
+                    if (qidx < qd.length) { ch.publish('nxt', { i: qidx }); hlp(); }
+                    else { ch.publish('end', {}); fin(); }
+                }, 10000);
+            }
+        }
+
+        function uhg() {
+            let u = document.getElementById('lb'); u.innerHTML = "";
+            Object.keys(pld).sort((a,b) => pld[b].s - pld[a].s).forEach((p, i) => {
+                let l = document.createElement('li'); l.innerHTML = `#${i+1} <b>${p}</b>: 🪙 ${pld[p].s}`; u.appendChild(l);
+            });
+        }
+        function fin() {
+            sw('go'); let u = document.getElementById('fl'); u.innerHTML = "";
+            Object.keys(pld).sort((a,b) => pld[b].s - pld[a].s).forEach((p, i) => {
+                let l = document.createElement('li'); l.innerText = `🏆 #${i+1}: ${p} (${pld[p].s})`; u.appendChild(l);
+            });
+        }
+
+        function joinGame() {
+            // Deprecated fallback mapping to handle legacy event triggers
+            g();
+        }
+
+        function g() {
+            pin = document.getElementById('p').value.trim(); name = document.getElementById('n').value.trim();
+            if (!pin || !name) return alert('Error');
+            ab = new Ably.Realtime({ key: 'h_99gA.7pL6iA:mUv_w1mE542N8g9mZp-lqj9K6j8vP_zIcoX_bY17Wnc' });
+            ch = ab.channels.get('r-' + pin);
+            ab.connection.on('connected', () => { ch.publish('join', { n: name }); sw('wait'); });
+            ch.subscribe('list', (m) => plist = m.data.l);
+            ch.subscribe('sync', (m) => { if(m.data.d[name] !== undefined) { gold = m.data.d[name].s; document.getElementById('gold').innerText = "🪙 Gold: " + gold; } });
+            ch.subscribe('start', (m) => { qidx = m.data.i; lq(); });
+            ch.subscribe('nxt', (m) => { qidx = m.data.i; lq(); });
+            ch.subscribe('end', () => { sw('go'); document.getElementById('fl').innerHTML = "<li>Check Host!</li>"; });
+        }
+
+        function lq() {
+            sw('pg'); let q = qd[qidx];
+            for(let i=0; i<4; i++) { let b = document.getElementById('b'+i); b.innerText = q.a[i]; b.disabled = false; }
+        }
+
+        function ans(i) {
+            for(let j=0; j<4; j++) document.getElementById('b'+j).disabled = true;
+            if (i === qd[qidx].c) { setTimeout(() => sw('ch'), 400); }
+            else { sw('wait'); }
+        }
+
+        function chst() {
+            let r = ["coins", "take", "swap"][Math.floor(Math.random() * 3)];
+            if (r === "coins") {
+                let a = Math.floor(Math.random() * 30) + 10; alert(`+${a} Gold!`);
+                ch.publish('act', { f: name, t: null, y: "add", v: a }); sw('wait');
+            } else { act = r; tg(r === "take" ? "STEAL 20%" : "SWAP scores"); }
+        }
+
+        function tg(t) {
+            let s = plist.filter(p => p !== name);
+            if (s.length === 0) { ch.publish('act', { f: name, t: null, y: "add", v: 10 }); return sw('wait'); }
+            document.getElementById('at').innerText = t;
+            let el = document.getElementById('ts'); el.innerHTML = "";
+            s.forEach(p => { let o = document.createElement('option'); o.value = p; o.innerText = p; el.appendChild(o); });
+            sw('tg');
+        }
+
+        function cf() {
+            let t = document.getElementById('ts').value;
+            ch.publish('act', { f: name, t: t, y: act, v: 0 });
+            act = null; sw('wait');
+        }
+    </script>
+</body>
+</html>
