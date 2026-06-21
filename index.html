@@ -3,78 +3,95 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quiz</title>
-    <!-- PeerJS links for free multiplayer with no API keys -->
+    <title>QuizQuest</title>
+    <!-- Trystero Library: 100% Free Cross-Browser Multiplayer with No API Keys -->
     <script src="https://unpkg.com"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; max-width: 90vw; }
         body { font-family: sans-serif; background: #121214; color: #fff; padding: 10px; overflow-x: hidden; }
         div { width: 90vw; margin: 10px auto; display: block; word-wrap: break-word; }
         input, button { width: 100%; padding: 12px; margin: 5px 0; font-size: 16px; display: block; }
-        button { background: #e43f5a; color: #fff; border: none; border-radius: 5px; cursor: pointer; }
+        button { background: #e43f5a; color: #fff; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
         .hidden { display: none !important; }
         ul { list-style: none; text-align: left; }
         li { background: #222; margin: 5px 0; padding: 10px; border-radius: 4px; }
+        .stop-btn { background: #55555d; color: #fff; margin-top: 20px; }
     </style>
 </head>
 <body>
 
-    <h1>QuizQuest P2P</h1>
+    <h1>🚀 QuizQuest P2P</h1>
 
+    <!-- MAIN MENU -->
     <div id="m">
-        <button onclick="h()">🏠 Host Game</button>
-        <button onclick="s()">📱 Join Game</button>
+        <button onclick="h()">Host Game</button>
+        <button onclick="s()">Join Game</button>
     </div>
 
+    <!-- JOIN SETUP -->
     <div id="j" class="hidden">
-        <input type="text" id="p" placeholder="Enter Host ID code">
+        <input type="text" id="p" placeholder="Enter Room PIN Code">
         <input type="text" id="n" placeholder="Nickname">
-        <button onclick="g()">Join</button>
+        <button onclick="g()">Join Lobby</button>
+        <button onclick="stopGame()" class="stop-btn">Quit</button>
     </div>
 
+    <!-- HOST LOBBY -->
     <div id="hl" class="hidden">
-        <h2>ID CODE: <span id="l" style="color:#22c55e; font-size:14px;">Loading...</span></h2>
+        <h2>ROOM PIN: <span id="l" style="color:#22c55e;">Generating...</span></h2>
+        <p style="margin: 5px 0; color:#aaa;">(Share this custom room PIN with your friends)</p>
         <ul id="pl"></ul>
-        <button onclick="st()">▶️ Start</button>
+        <button onclick="st()">Start Quiz</button>
+        <button onclick="stopGame()" class="stop-btn">Close Server</button>
     </div>
 
+    <!-- PLAYER WAIT SCREEN -->
     <div id="wait" class="hidden">
-        <p>Connected! Waiting for host...</p>
+        <p>Connected! Waiting for host to click start...</p>
+        <button onclick="stopGame()" class="stop-btn">Leave</button>
     </div>
 
+    <!-- HOST LEADERBOARD VIEW -->
     <div id="hg" class="hidden">
-        <h2 id="hq">Loading...</h2>
+        <h2 id="hq">Loading question...</h2>
         <ul id="lb"></ul>
+        <button onclick="stopGame()" class="stop-btn">Force Stop</button>
     </div>
 
+    <!-- PLAYER INTERFACE -->
     <div id="pg" class="hidden">
         <h2 id="gold">🪙 Gold: 0</h2>
-        <h3 id="pq-text">Question text</h3>
-        <button onclick="ans(0)" id="b0"></button>
-        <button onclick="ans(1)" id="b1"></button>
-        <button onclick="ans(2)" id="b2"></button>
-        <button onclick="ans(3)" id="b3"></button>
+        <h3 id="pq-text" style="margin: 10px 0; color:#e43f5a;">Question text</h3>
+        <button onclick="ans(0)" id="b0" style="background:#1e1b4b;"></button>
+        <button onclick="ans(1)" id="b1" style="background:#1e1b4b;"></button>
+        <button onclick="ans(2)" id="b2" style="background:#1e1b4b;"></button>
+        <button onclick="ans(3)" id="b3" style="background:#1e1b4b;"></button>
     </div>
 
+    <!-- CHEST VIEW -->
     <div id="ch" class="hidden">
         <h2>Pick a Chest</h2>
-        <button onclick="chst()">🎁 Chest 1</button>
-        <button onclick="chst()">🎁 Chest 2</button>
-        <button onclick="chst()">🎁 Chest 3</button>
+        <button onclick="chst()" style="background:#eab308; color:#000;">🎁 Chest 1</button>
+        <button onclick="chst()" style="background:#eab308; color:#000;">🎁 Chest 2</button>
+        <button onclick="chst()" style="background:#eab308; color:#000;">🎁 Chest 3</button>
     </div>
 
+    <!-- PODIUM END -->
     <div id="go" class="hidden">
         <h2>Final Standings 🏆</h2>
         <ul id="fl"></ul>
-        <button onclick="location.reload()">Play Again</button>
+        <button onclick="location.reload()">Return Home</button>
     </div>
 
     <script>
         const qd = [
             { q: "What is 5 + 7?", a: ["10", "12", "14", "11"], c: 1 },
-            { q: "Which planet is Red?", a: ["Earth", "Mars", "Jupiter", "Venus"], c: 1 }
+            { q: "Which planet is Red?", a: ["Earth", "Mars", "Jupiter", "Venus"], c: 1 },
+            { q: "Capital of France?", a: ["London", "Berlin", "Paris", "Rome"], c: 2 }
         ];
-        let peer, conn, channel, host = false, name = "", qidx = 0, pld = {}, gold = 0, connections = [];
+        
+        let room, sendJoin, sendScore, sendStart, sendNxt, sendEnd, sendSync;
+        let host = false, name = "", qidx = 0, pld = {}, gold = 0, pin = "";
 
         function sw(id) {
             ['m', 'j', 'hl', 'wait', 'hg', 'pg', 'ch', 'go'].forEach(s => document.getElementById(s).classList.add('hidden'));
@@ -82,49 +99,50 @@
         }
         function s() { sw('j'); }
 
+        // HOST SYSTEM
         function h() {
-            host = true; sw('hl');
-            peer = new Peer();
-            peer.on('open', (id) => { document.getElementById('l').innerText = id; });
-            peer.on('connection', (c) => {
-                connections.push(c);
-                c.on('data', (data) => {
-                    if (data.type === 'join') {
-                        pld[data.n] = { s: 0 };
-                        ulb();
-                    }
-                    if (data.type === 'score') {
-                        pld[data.n].s += data.v;
-                        uhg();
-                        connections.forEach(conn => conn.send({ type: 'sync', d: pld }));
-                    }
-                });
+            host = true; pin = Math.floor(1000 + Math.random() * 9000).toString();
+            document.getElementById('l').innerText = pin; sw('hl');
+            
+            // Connect to Trystero BitTorrent web mesh securely
+            room = trystero.joinRoom({appId: 'blooket-mini-clone-app'}, pin);
+            
+            // Register Data Channel Triggers
+            const [bindJoin] = room.makeAction('join');
+            const [bindScore] = room.makeAction('score');
+            [sendStart] = room.makeAction('start');
+            [sendNxt] = room.makeAction('nxt');
+            [sendEnd] = room.makeAction('end');
+            [sendSync] = room.makeAction('sync');
+
+            bindJoin((data) => {
+                pld[data.n] = { s: 0 }; ulb();
+            });
+
+            bindScore((data) => {
+                pld[data.n].s += data.v; uhg();
+                sendSync({d: pld});
             });
         }
 
         function ulb() {
             let u = document.getElementById('pl'); u.innerHTML = "";
-            Object.keys(pld).forEach(p => { let i = document.createElement('li'); i.innerText = "👤 " + p; u.appendChild(i); });
+            Object.keys(pld).forEach(p => { let i = document.createElement('li'); i.innerText = "👤 Player Joined: " + p; u.appendChild(i); });
         }
 
         function st() {
-            connections.forEach(c => c.send({ type: 'start', i: 0 }));
-            hlp();
+            if (Object.keys(pld).length === 0) return alert("Wait for players to join!");
+            sendStart({ i: 0 }); hlp();
         }
 
         function hlp() {
             sw('hg');
             if (qidx < qd.length) {
-                document.getElementById('hq').innerText = qd[qidx].q; uhg();
+                document.getElementById('hq').innerText = "Question " + (qidx+1) + ": " + qd[qidx].q; uhg();
                 setTimeout(() => {
                     qidx++;
-                    if (qidx < qd.length) { 
-                        connections.forEach(c => c.send({ type: 'nxt', i: qidx }));
-                        hlp(); 
-                    } else { 
-                        connections.forEach(c => c.send({ type: 'end' }));
-                        fin(); 
-                    }
+                    if (qidx < qd.length) { sendNxt({ i: qidx }); hlp(); }
+                    else { sendEnd({}); fin(); }
                 }, 10000);
             }
         }
@@ -132,39 +150,46 @@
         function uhg() {
             let u = document.getElementById('lb'); u.innerHTML = "";
             Object.keys(pld).sort((a,b) => pld[b].s - pld[a].s).forEach((p, i) => {
-                let l = document.createElement('li'); l.innerHTML = `#${i+1} <b>${p}</b>: 🪙 ${pld[p].s}`; u.appendChild(l);
+                let l = document.createElement('li'); l.innerHTML = `#${i+1} <b>${p}</b>: 🪙 ${pld[p].s} Gold`; u.appendChild(l);
             });
         }
 
         function fin() {
             sw('go'); let u = document.getElementById('fl'); u.innerHTML = "";
             Object.keys(pld).sort((a,b) => pld[b].s - pld[a].s).forEach((p, i) => {
-                let l = document.createElement('li'); l.innerText = `🏆 #${i+1}: ${p} (${pld[p].s})`; u.appendChild(l);
+                let l = document.createElement('li'); l.innerText = `🏆 #${i+1}: ${p} (${pld[p].s} Gold)`; u.appendChild(l);
             });
         }
 
+        // PLAYER SYSTEM
         function g() {
-            let pin = document.getElementById('p').value.trim();
-            name = document.getElementById('n').value.trim();
-            if (!pin || !name) return alert('Error');
-            peer = new Peer();
-            peer.on('open', () => {
-                conn = peer.connect(pin);
-                conn.on('open', () => {
-                    conn.send({ type: 'join', n: name });
-                    sw('wait');
-                });
-                conn.on('data', (data) => {
-                    if (data.type === 'start' || data.type === 'nxt') { qidx = data.i; lq(); }
-                    if (data.type === 'sync') { if(data.d[name] !== undefined) { gold = data.d[name].s; document.getElementById('gold').innerText = "🪙 Gold: " + gold; } }
-                    if (data.type === 'end') { sw('go'); document.getElementById('fl').innerHTML = "<li>Check Host screen!</li>"; }
-                });
+            pin = document.getElementById('p').value.trim();
+            name = document.getElementById('n').value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (!pin || !name) return alert('Enter Pin and Nickname!');
+            
+            room = trystero.joinRoom({appId: 'blooket-mini-clone-app'}, pin);
+            
+            [sendJoin] = room.makeAction('join');
+            [sendScore] = room.makeAction('score');
+            const [bindStart] = room.makeAction('start');
+            const [bindNxt] = room.makeAction('nxt');
+            const [bindEnd] = room.makeAction('end');
+            const [bindSync] = room.makeAction('sync');
+
+            room.onPeerJoin(() => {
+                sendJoin({ n: name });
+                sw('wait');
             });
+
+            bindStart((data) => { qidx = data.i; lq(); });
+            bindNxt((data) => { qidx = data.i; lq(); });
+            bindEnd(() => { sw('go'); document.getElementById('fl').innerHTML = "<li>Game Over! Check Host screen.</li>"; });
+            bindSync((data) => { if(data.d[name] !== undefined) { gold = data.d[name].s; document.getElementById('gold').innerText = "🪙 Gold: " + gold; } });
         }
 
         function lq() {
             sw('pg'); let q = qd[qidx];
-            document.getElementById('pq-text').innerText = q.q;
+            document.getElementById('pq-text').innerText = "Question " + (qidx+1) + ": " + q.q;
             for(let i=0; i<4; i++) { let b = document.getElementById('b'+i); b.innerText = q.a[i]; b.disabled = false; }
         }
 
@@ -175,13 +200,15 @@
         }
 
         function chst() {
-            let a = Math.floor(Math.random() * 30) + 10; alert(`+${a} Gold!`);
-            conn.send({ type: 'score', n: name, v: a });
-            sw('wait');
+            let a = Math.floor(Math.random() * 40) + 15; alert(`You got +${a} Gold!`);
+            sendScore({ n: name, v: a }); sw('wait');
         }
+
+        function stopGame() { if (room) { room.leave(); } location.reload(); }
     </script>
 </body>
 </html>
+
 
 
 
