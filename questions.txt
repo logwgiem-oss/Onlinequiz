@@ -1,0 +1,17 @@
+[
+  {
+    "q": "What color is a banana?",
+    "a": ["Blue", "Red", "Yellow", "Green"],
+    "c": 2
+  },
+  {
+    "q": "Which animal is the King of the Jungle?",
+    "a": ["Lion", "Elephant", "Tiger", "Cheetah"],
+    "c": 0
+  },
+  {
+    "q": "How many days are in a year?",
+    "a": ["365", "366", "360", "400"],
+    "c": 0
+  }
+]
