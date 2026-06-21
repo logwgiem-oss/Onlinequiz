@@ -7,8 +7,8 @@
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; max-width: 90vw; }
         body { font-family: sans-serif; background: #121214; color: #fff; padding: 10px; overflow-x: hidden; text-align: center; }
-        div { width: 90vw; margin: 10px auto; display: block; word-wrap: break-word; }
-        input, button { width: 100%; padding: 12px; margin: 5px 0; font-size: 16px; display: block; white-space: normal; }
+        div { width: 90vw; margin: 8px auto; display: block; word-wrap: break-word; }
+        input, select, button { width: 100%; padding: 12px; margin: 5px 0; font-size: 16px; display: block; white-space: normal; }
         button { background: #e43f5a; color: #fff; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
         .hidden { display: none !important; }
         ul { list-style: none; text-align: left; }
@@ -79,6 +79,7 @@
         ];
         
         let ws, host = false, name = "", qidx = 0, pld = {}, gold = 0, pin = "";
+        const bc = new BroadcastChannel('quiz_backup_hub');
 
         function sw(id) {
             ['m', 'j', 'hl', 'wait', 'hg', 'pg', 'ch', 'go'].forEach(s => document.getElementById(s).classList.add('hidden'));
@@ -86,43 +87,39 @@
         }
         function s() { sw('j'); }
 
+        function handleMessage(msg) {
+            if (msg.pin !== pin) return;
+            if (host) {
+                if (msg.type === 'join') { pld[msg.n] = { s: 0 }; ulb(); send({ type: 'sync', d: pld }); }
+                if (msg.type === 'score') { pld[msg.n].s += msg.v; uhg(); send({ type: 'sync', d: pld }); }
+            } else {
+                if (msg.type === 'sync') {
+                    document.getElementById('wait-msg').innerText = "✅ Joined successfully! Waiting for host...";
+                    if(msg.d[name] !== undefined) { gold = msg.d[name].s; document.getElementById('gold').innerText = gold; }
+                }
+                if (msg.type === 'start' || msg.type === 'nxt') { qidx = msg.i; lq(); }
+                if (msg.type === 'end') { sw('go'); document.getElementById('fl').innerHTML = "<li>Game Over! Check Host screen.</li>"; }
+            }
+        }
+
+        bc.onmessage = (e) => handleMessage(e.data);
+
         function initWS() {
-            // Public unblocked network cluster key
-            ws = new WebSocket('wss://://piesocket.com');
+            // New stable cross-browser public network hub
+            ws = new WebSocket('wss://://piehost.com');
             
             ws.onopen = () => {
-                if (!host) {
-                    // Send join alerts continuously until the host captures it
-                    setInterval(() => { send({ type: 'join', n: name }); }, 1500);
-                }
+                if (!host) setInterval(() => { send({ type: 'join', n: name }); }, 1500);
             };
 
             ws.onmessage = (e) => {
-                let msg = JSON.parse(e.data);
-                if (msg.pin !== pin) return;
-
-                if (host) {
-                    if (msg.type === 'join') {
-                        pld[msg.n] = { s: 0 }; ulb();
-                        send({ type: 'sync', d: pld });
-                    }
-                    if (msg.type === 'score') {
-                        pld[msg.n].s += msg.v; uhg();
-                        send({ type: 'sync', d: pld });
-                    }
-                } else {
-                    if (msg.type === 'sync') {
-                        document.getElementById('wait-msg').innerText = "✅ Joined successfully! Waiting for host...";
-                        if(msg.d[name] !== undefined) { gold = msg.d[name].s; document.getElementById('gold').innerText = gold; }
-                    }
-                    if (msg.type === 'start' || msg.type === 'nxt') { qidx = msg.i; lq(); }
-                    if (msg.type === 'end') { sw('go'); document.getElementById('fl').innerHTML = "<li>Game Over! Check Host screen.</li>"; }
-                }
+                try { handleMessage(JSON.parse(e.data)); } catch(err) {}
             };
         }
 
         function send(obj) {
             obj.pin = pin;
+            bc.postMessage(obj); // Backup local route
             if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
         }
 
@@ -200,6 +197,7 @@
     </script>
 </body>
 </html>
+
 
 
 
