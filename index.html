@@ -2,12 +2,13 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quiz</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>QuizQuest</title>
+    <!-- Include the Free GunDB Decentralized Database -->
+    <script src="https://jsdelivr.net"></script>
     <style>
-        /* Strict full screen width container lock */
         * { box-sizing: border-box; margin: 0; padding: 0; max-width: 90vw; }
-        body { font-family: sans-serif; background: #121214; color: #fff; padding: 10px; overflow-x: hidden; }
+        body { font-family: sans-serif; background: #121214; color: #fff; padding: 10px; overflow-x: hidden; text-align: center; }
         div { width: 90vw; margin: 10px auto; display: block; word-wrap: break-word; }
         input, button { width: 100%; padding: 12px; margin: 5px 0; font-size: 16px; display: block; white-space: normal; }
         button { background: #e43f5a; color: #fff; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
@@ -18,15 +19,15 @@
 </head>
 <body>
 
-    <h1>🚀 QuizQuest</h1>
+    <h1>🚀 QuizQuest Live</h1>
 
     <div id="m">
-        <button onclick="h()">Host Game</button>
-        <button onclick="s()">Join Game</button>
+        <button onclick="h()">🏠 Host Game</button>
+        <button onclick="s()">📱 Join Game</button>
     </div>
 
     <div id="j" class="hidden">
-        <input type="text" id="p" placeholder="Enter Room PIN Code">
+        <input type="text" id="p" placeholder="Enter 4-Digit PIN">
         <input type="text" id="n" placeholder="Nickname">
         <button onclick="g()">Join Lobby</button>
         <button onclick="stopGame()">Quit</button>
@@ -40,7 +41,7 @@
     </div>
 
     <div id="wait" class="hidden">
-        <p id="wait-msg">Connecting to room relay...</p>
+        <p id="wait-msg">Connecting to room...</p>
         <button onclick="stopGame()">Leave</button>
     </div>
 
@@ -73,13 +74,16 @@
     </div>
 
     <script>
+        // Start GunDB using free public mesh nodes
+        const gun = Gun(['https://herokuapp.com']);
+
         const qd = [
             { q: "What is 5 + 7?", a: ["10", "12", "14", "11"], c: 1 },
             { q: "Which planet is Red?", a: ["Earth", "Mars", "Jupiter", "Venus"], c: 1 },
             { q: "Capital of France?", a: ["London", "Berlin", "Paris", "Rome"], c: 2 }
         ];
         
-        let ws, host = false, name = "", qidx = 0, pld = {}, gold = 0, pin = "";
+        let host = false, name = "", qidx = 0, pin = "", roomRef = null, pld = {}, gold = 0;
 
         function sw(id) {
             ['m', 'j', 'hl', 'wait', 'hg', 'pg', 'ch', 'go'].forEach(s => document.getElementById(s).classList.add('hidden'));
@@ -87,77 +91,56 @@
         }
         function s() { sw('j'); }
 
-        function initWS() {
-            // Free, fast public room network channel cluster
-            ws = new WebSocket('wss://://piesocket.com');
-            
-            ws.onmessage = (e) => {
-                let msg = JSON.parse(e.data);
-                if (msg.pin !== pin) return;
-
-                if (host) {
-                    if (msg.type === 'join') {
-                        pld[msg.n] = { s: 0 }; ulb();
-                        send({ type: 'sync', d: pld });
-                    }
-                    if (msg.type === 'score') {
-                        pld[msg.n].s += msg.v; uhg();
-                        send({ type: 'sync', d: pld });
-                    }
-                } else {
-                    if (msg.type === 'sync') {
-                        document.getElementById('wait-msg').innerText = "✅ Joined successfully! Waiting for host...";
-                        if(msg.d[name] !== undefined) { gold = msg.d[name].s; document.getElementById('gold').innerText = gold; }
-                    }
-                    if (msg.type === 'start' || msg.type === 'nxt') { qidx = msg.i; lq(); }
-                    if (msg.type === 'end') { sw('go'); document.getElementById('fl').innerHTML = "<li>Game Over! Check Host screen.</li>"; }
-                }
-            };
-        }
-
-        function send(obj) {
-            obj.pin = pin;
-            if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
-        }
-
         function h() {
             host = true; pin = Math.floor(1000 + Math.random() * 9000).toString();
             document.getElementById('l').innerText = pin; sw('hl');
-            initWS();
+            
+            roomRef = gun.get('room_' + pin);
+            roomRef.put({ state: 'lobby', qidx: 0 });
+            
+            // Listen for any player entries worldwide
+            roomRef.get('players').map().on((data, key) => {
+                if (data) {
+                    pld[key] = { s: data.score };
+                    ulb();
+                    if (!document.getElementById('hg').classList.contains('hidden')) uhg();
+                }
+            });
         }
 
         function ulb() {
             let u = document.getElementById('pl'); u.innerHTML = "";
-            Object.keys(pld).forEach(p => { let i = document.createElement('li'); i.innerText = "👤 Player Joined: " + p; u.appendChild(i); });
+            Object.keys(pld).forEach(p => { let i = document.createElement('li'); i.innerText = "👤 Player: " + p; u.appendChild(i); });
         }
 
         function st() {
             if (Object.keys(pld).length === 0) return alert("Wait for players!");
-            send({ type: 'start', i: 0 }); hlp();
+            roomRef.put({ state: 'game', qidx: 0 });
+            hlp();
         }
 
         function hlp() {
-            sw('hg');
+            sw('hg'); uhg();
             if (qidx < qd.length) {
-                document.getElementById('hq').innerText = qd[qidx].q; uhg();
+                document.getElementById('hq').innerText = qd[qidx].q;
                 setTimeout(() => {
                     qidx++;
-                    if (qidx < qd.length) { send({ type: 'nxt', i: qidx }); hlp(); }
-                    else { send({ type: 'end' }); fin(); }
+                    if (qidx < qd.length) { roomRef.put({ qidx: qidx }); hlp(); }
+                    else { roomRef.put({ state: 'end' }); fin(); }
                 }, 10000);
             }
         }
 
         function uhg() {
             let u = document.getElementById('lb'); u.innerHTML = "";
-            Object.keys(pld).sort((a,b) => pld[b].s - pld[a].s).forEach((p, i) => {
+            Object.keys(pld).sort((a,b) => pld[a].s - pld[b].s).forEach((p, i) => {
                 let l = document.createElement('li'); l.innerHTML = `#${i+1} <b>${p}</b>: 🪙 ${pld[p].s} Gold`; u.appendChild(l);
             });
         }
 
         function fin() {
             sw('go'); let u = document.getElementById('fl'); u.innerHTML = "";
-            Object.keys(pld).sort((a,b) => pld[b].s - pld[a].s).forEach((p, i) => {
+            Object.keys(pld).sort((a,b) => pld[a].s - pld[b].s).forEach((p, i) => {
                 let l = document.createElement('li'); l.innerText = `🏆 #${i+1}: ${p} (${pld[p].s} Gold)`; u.appendChild(l);
             });
         }
@@ -165,15 +148,26 @@
         function g() {
             pin = document.getElementById('p').value.trim();
             name = document.getElementById('n').value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-            if (!pin || !name) return alert('Enter Pin and Nickname!');
+            if (!pin || !name) return alert('Enter fields!');
             
             sw('wait');
-            document.getElementById('wait-msg').innerText = "Connecting to Host PIN " + pin + "...";
-            initWS();
+            document.getElementById('wait-msg').innerText = "Connecting to Host Room PIN " + pin + "...";
+            
+            roomRef = gun.get('room_' + pin);
+            
+            // Add player path directly to the host mesh
+            roomRef.get('players').get(name).put({ score: 0 });
+            
+            roomRef.on((data) => {
+                if (!data) return;
+                document.getElementById('wait-msg').innerText = "✅ Joined successfully! Waiting for host...";
+                if (data.state === 'game') { qidx = data.qidx; lq(); }
+                if (data.state === 'end') { sw('go'); document.getElementById('fl').innerHTML = "<li>Game Over!</li>"; }
+            });
 
-            ws.onopen = () => {
-                setInterval(() => { send({ type: 'join', n: name }); }, 1500);
-            };
+            roomRef.get('players').get(name).on((data) => {
+                if (data) { gold = data.score; document.getElementById('gold').innerText = gold; }
+            });
         }
 
         function lq() {
@@ -190,11 +184,12 @@
 
         function chst() {
             let a = Math.floor(Math.random() * 40) + 15; alert(`You got +${a} Gold!`);
-            send({ type: 'score', n: name, v: a }); sw('wait');
+            roomRef.get('players').get(name).put({ score: gold + a });
+            sw('wait');
             document.getElementById('wait-msg').innerText = "Waiting for next question...";
         }
 
-        function stopGame() { if (ws) { ws.close(); } location.reload(); }
+        function stopGame() { if(roomRef && host) { roomRef.put(null); } location.reload(); }
     </script>
 </body>
 </html>
